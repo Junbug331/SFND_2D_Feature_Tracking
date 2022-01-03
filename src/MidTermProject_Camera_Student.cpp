@@ -21,7 +21,10 @@ using namespace std;
 /* MAIN PROGRAM */
 int main(int argc, const char *argv[])
 {
-
+    ofstream myFile;
+    bool isBinary = true;
+    string detectorName = "ORB";
+    string descriptorName = "ORB";
     /* INIT VARIABLES AND DATA STRUCTURES */
 
     // data location
@@ -37,8 +40,10 @@ int main(int argc, const char *argv[])
 
     // misc
     int dataBufferSize = 2;       // no. of images which are held in memory (ring buffer) at the same time
-    vector<DataFrame> dataBuffer; // list of data frames which are held in memory at the same time
+    DataBuffer<DataFrame> dataBuffer(dataBufferSize);
     bool bVis = false;            // visualize results
+
+    double time_log;
 
     /* MAIN LOOP OVER ALL IMAGES */
 
@@ -71,42 +76,39 @@ int main(int argc, const char *argv[])
 
         // extract 2D keypoints from current image
         vector<cv::KeyPoint> keypoints; // create empty feature list for current image
-        string detectorType = "SHITOMASI";
+        string detectorType = detectorName;
 
         //// STUDENT ASSIGNMENT
         //// TASK MP.2 -> add the following keypoint detectors in file matching2D.cpp and enable string-based selection based on detectorType
         //// -> HARRIS, FAST, BRISK, ORB, AKAZE, SIFT
-
-        if (detectorType.compare("SHITOMASI") == 0)
-        {
-            detKeypointsShiTomasi(keypoints, imgGray, false);
-        }
-        else
-        {
-            //...
-        }
+        detKeypointsModern(keypoints, imgGray, detectorType, time_log, bVis);
         //// EOF STUDENT ASSIGNMENT
 
         //// STUDENT ASSIGNMENT
         //// TASK MP.3 -> only keep keypoints on the preceding vehicle
 
         // only keep keypoints on the preceding vehicle
-        bool bFocusOnVehicle = true;
+        bool bFocusOnVehicle = bVis;
         cv::Rect vehicleRect(535, 180, 180, 150);
         if (bFocusOnVehicle)
         {
-            // ...
+            vector<cv::KeyPoint> newkeypoints;
+            for (const auto& kp : keypoints)
+            {
+                if (vehicleRect.contains(kp.pt))
+                    newkeypoints.push_back(kp);
+            }
+            keypoints = std::move(newkeypoints);
         }
 
         //// EOF STUDENT ASSIGNMENT
 
         // optional : limit number of keypoints (helpful for debugging and learning)
-        bool bLimitKpts = false;
+        bool bLimitKpts = true;
         if (bLimitKpts)
         {
             int maxKeypoints = 50;
-
-            if (detectorType.compare("SHITOMASI") == 0)
+            if (detectorType.compare(detectorName) == 0)
             { // there is no response info, so keep the first 50 as they are sorted in descending quality order
                 keypoints.erase(keypoints.begin() + maxKeypoints, keypoints.end());
             }
@@ -125,8 +127,10 @@ int main(int argc, const char *argv[])
         //// -> BRIEF, ORB, FREAK, AKAZE, SIFT
 
         cv::Mat descriptors;
-        string descriptorType = "BRISK"; // BRIEF, ORB, FREAK, AKAZE, SIFT
-        descKeypoints((dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->cameraImg, descriptors, descriptorType);
+        string descriptorType = descriptorName; // BRIEF, ORB, FREAK, AKAZE, SIFT
+        cout << "ORB DEBUG" << endl;
+        descKeypoints((dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->cameraImg, descriptors, descriptorType, time_log);
+        cout << "ORB DEBUG2222" << endl;
         //// EOF STUDENT ASSIGNMENT
 
         // push descriptors for current frame to end of data buffer
@@ -141,8 +145,8 @@ int main(int argc, const char *argv[])
 
             vector<cv::DMatch> matches;
             string matcherType = "MAT_BF";        // MAT_BF, MAT_FLANN
-            string descriptorType = "DES_BINARY"; // DES_BINARY, DES_HOG
-            string selectorType = "SEL_NN";       // SEL_NN, SEL_KNN
+            string descriptorType = (descriptorName.compare("SIFT") != 0) ? "DES_BINARY" : "DES_HOG"; // DES_BINARY, DES_HOG
+            string selectorType = "SEL_KNN";       // SEL_NN, SEL_KNN
 
             //// STUDENT ASSIGNMENT
             //// TASK MP.5 -> add FLANN matching in file matching2D.cpp
